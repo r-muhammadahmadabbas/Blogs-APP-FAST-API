@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI Blog Client</title>
+    <style>
+        /* CSS Styles */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f4f4f9; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        .hidden { display: none; }
+        
+        /* Forms */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button.secondary { background-color: #6c757d; }
+        
+        /* Blog List */
+        .blog-post { border-bottom: 1px solid #eee; padding: 15px 0; }
+        .blog-post h3 { margin: 0 0 10px 0; color: #2c3e50; }
+        .blog-meta { font-size: 0.85em; color: #777; margin-bottom: 5px; }
+        
+        /* Utility */
+        #error-msg { color: red; margin-top: 10px; }
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="nav">
+            <h1>My Blog</h1>
+            <div id="auth-buttons">
+                <button id="logout-btn" class="hidden" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <div id="error-msg"></div>
+
+        <div id="auth-section">
+            <div class="tabs">
+                <button onclick="showLogin()">Login</button>
+                <button class="secondary" onclick="showRegister()">Register</button>
+            </div>
+
+            <div id="login-form" style="margin-top: 20px;">
+                <h2>Login</h2>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="text" id="login-email" placeholder="ahmad@gmail.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="login-password">
+                </div>
+                <button onclick="login()">Sign In</button>
+            </div>
+
+            <div id="register-form" class="hidden" style="margin-top: 20px;">
+                <h2>Register</h2>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="reg-name" placeholder="Ahmad">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="reg-email" placeholder="ahmad@gmail.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="reg-password">
+                </div>
+                <button onclick="register()">Sign Up</button>
+            </div>
+        </div>
+
+        <div id="blog-section" class="hidden">
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                <h3>Create New Post</h3>
+                <div class="form-group">
+                    <input type="text" id="blog-title" placeholder="Title">
+                </div>
+                <div class="form-group">
+                    <textarea id="blog-body" rows="3" placeholder="What's on your mind?"></textarea>
+                </div>
+                <button onclick="createBlog()">Publish</button>
+            </div>
+
+            <h2>Recent Posts</h2>
+            <div id="blog-list">
+                <p>Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000"; // Change if your port differs
+
+        // --- State Management ---
+        function checkAuth() {
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('blog-section').classList.remove('hidden');
+                document.getElementById('logout-btn').classList.remove('hidden');
+                fetchBlogs();
+            } else {
+                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('blog-section').classList.add('hidden');
+                document.getElementById('logout-btn').classList.add('hidden');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            checkAuth();
+        }
+
+        // --- UI Toggles ---
+        function showLogin() {
+            document.getElementById('login-form').classList.remove('hidden');
+            document.getElementById('register-form').classList.add('hidden');
+        }
+        function showRegister() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.remove('hidden');
+        }
+
+        // --- API Interactions ---
+
+        // 1. Login (Uses OAuth2 Form Data, not JSON)
+        async function login() {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            // Note: OAuth2PasswordRequestForm expects 'username' and 'password' fields in form-data
+            const formData = new URLSearchParams();
+            formData.append('username', email); 
+            formData.append('password', password);
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Login failed');
+                
+                const data = await response.json();
+                localStorage.setItem('access_token', data.access_token);
+                checkAuth();
+            } catch (err) {
+                document.getElementById('error-msg').innerText = "Login failed. Check credentials.";
+            }
+        }
+
+        // 2. Register (Uses JSON Schema)
+        async function register() {
+            const name = document.getElementById('reg-name').value;
+            const email = document.getElementById('reg-email').value;
+            const password = document.getElementById('reg-password').value;
+
+            try {
+                const response = await fetch(`${API_URL}/user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password })
+                });
+
+                if (!response.ok) throw new Error('Registration failed');
+                
+                alert("Registered successfully! Please login.");
+                showLogin();
+            } catch (err) {
+                document.getElementById('error-msg').innerText = "Registration failed.";
+            }
+        }
+
+        // 3. Fetch Blogs
+        async function fetchBlogs() {
+            const token = localStorage.getItem('access_token');
+            try {
+                // Assuming your blog router exposes GET /blog
+                const response = await fetch(`${API_URL}/blog`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) throw new Error('Failed to fetch blogs');
+                
+                const blogs = await response.json();
+                const container = document.getElementById('blog-list');
+                container.innerHTML = '';
+
+                blogs.forEach(blog => {
+                    const div = document.createElement('div');
+                    div.className = 'blog-post';
+                    div.innerHTML = `
+                        <h3>${blog.title}</h3>
+                        <div class="blog-meta">By: ${blog.creator ? blog.creator.name : 'Unknown'}</div>
+                        <p>${blog.body}</p>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (err) {
+                console.error(err);
+                document.getElementById('blog-list').innerHTML = '<p>No blogs found or API error.</p>';
+            }
+        }
+
+        // 4. Create Blog
+        async function createBlog() {
+            const title = document.getElementById('blog-title').value;
+            const body = document.getElementById('blog-body').value;
+            const token = localStorage.getItem('access_token');
+
+            try {
+                const response = await fetch(`${API_URL}/blog`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ title, body })
+                });
+
+                if (response.ok) {
+                    document.getElementById('blog-title').value = '';
+                    document.getElementById('blog-body').value = '';
+                    fetchBlogs(); // Refresh list
+                } else {
+                    alert("Failed to create blog");
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Init
+        checkAuth();
+    </script>
+</body>
+</html>
