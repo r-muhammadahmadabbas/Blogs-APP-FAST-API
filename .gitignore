@@ -1,2 +1,4 @@
 __pycache__/
 *.db
+config.bat
+node_modules
